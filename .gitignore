@@ -1,18 +1,6 @@
-# Ignore virtual environments
+# Ignore virtual environment
 venv/
 myenv/
-
-# Ignore compiled Python files
-*.pyc
-__pycache__/
-
-# Ignore system files (Mac & Windows)
-.DS_Store
-Thumbs.db
-
-# Ignore logs and temporary files
-*.log
-*.tmp
-
-# Ignore dependency folders
-*.egg-info/
+Lib/
+Scripts/
+Include/
