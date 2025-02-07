@@ -43,7 +43,6 @@ def handle_interview(question: str):
     initial_input = {"messages": HumanMessage(content=question)}
     collected_messages = []
 
-    # The library might let you do interview_graph.run(...) or interview_graph.stream(...)
     for event in interview_graph.stream(initial_input, stream_mode="values"):
         for message in event["messages"]:
             collected_messages.append(message.content)
