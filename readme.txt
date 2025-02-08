@@ -1,82 +1,76 @@
-# 1. Overall Architecture
+# AI Agent Backend (Prototype)
 
-## Microservice-Like Structure in a Single Application
+This repository contains the backend prototype for an AI-powered agent designed for tasks such as data analysis and report generation. The system is built with a microservices architecture, leveraging FastAPI, LangGraph, and PostgreSQL.
 
-Even though we’re implementing everything within one FastAPI application (for simplicity and ease of local deployment), we’ve separated the code into different modules (or folders) that represent distinct “microservices.” These modules are:
+## Architecture Overview
 
-- **Orchestrator**: Handles the overall conversation and workflow logic.
-- **Storage**: Manages data persistence (e.g., user data) using a database.
-- **LLM Connector**: Interfaces with a large language model (or a simulated version for our demo).
+The backend is composed of the following key components:
 
-Each module has its own router (set of endpoints) and specific functionality, which helps with separation of concerns, scalability, and ease of testing.
+*   **Orchestrator Microservice:** This service acts as the central coordinator for the AI agent. It handles user interactions via a chat interface, manages conversation state, and orchestrates the execution of tasks using LangGraph. It interacts with the LLM Connector and Storage services to fulfill user requests.
 
----
+*   **Storage Microservice:**  This service is responsible for persistent data storage. It uses PostgreSQL to manage user information, conversation history, and LangGraph checkpoints.  It exposes a RESTful API for CRUD operations on users, conversations, and checkpoints.  SQLAlchemy is used as the ORM.
 
-# 2. Main Application Entry Point (`main.py`)
+*   **LLM Connector Microservice:** (Described but not fully implemented in the provided code) This service provides an abstraction layer for interacting with large language models (LLMs), such as OpenAI's GPT models.  It handles sending prompts to the LLM and receiving responses.
 
-## Creating the FastAPI App
+*   **Main Application (FastAPI):**  The `main.py` file serves as the entry point for the application. It initializes the FastAPI application, registers the routers for the different microservices, and handles configuration loading.
 
-The `create_app()` function instantiates the FastAPI application. It also loads configuration settings from our `Settings` class (described later) and sets up the application.
+## Data Model
 
-## Router Registration
+The Storage microservice manages the following key entities:
 
-The app includes routers from the **orchestrator, storage, and LLM connector** modules. This is done by mounting each router under a distinct URL prefix (`/orchestrator`, `/storage`, `/llm`), which makes it clear which endpoints belong to which service.
+*   **Users:** Stores user information, including username, email, and a hashed password (security best practices are *essential* here – use a proper hashing library).
+*   **Conversations:** Represents a single conversation thread between a user and the AI agent. Each user can have multiple conversations.
+*   **Checkpoints:** Stores the state of a LangGraph conversation at a specific point in time. This enables resuming conversations and maintaining context. Checkpoints are stored as JSONB data in PostgreSQL, allowing for efficient storage and retrieval of complex data structures.
 
-## Database Initialization
+## Technologies Used
 
-For our minimal demo, we automatically create all database tables at startup by calling:
+*   **FastAPI:** A modern, fast (high-performance) web framework for building APIs with Python.
+*   **LangGraph:** A library for building stateful, multi-actor applications with LLMs, built on top of LangChain.
+*   **PostgreSQL:** A powerful, open-source relational database.
+*   **SQLAlchemy:** A Python SQL toolkit and Object-Relational Mapper (ORM).
+*   **Pydantic:** A data validation and parsing library that uses Python type hints.
+*   **Docker:** (Planned) Used for containerization, ensuring consistent environments across development, testing, and production.
+*   **JWT Authentication:** (Planned) JSON Web Tokens will be used for user authentication.
 
-Base.metadata.create_all(bind=engine)
+## Getting Started
+Before running the code you need to have docker and docker compose (v2) installed. 
 
-# 3. Configuration Management (config.py):
+To run the project, modify the database url in the storage/database.py: 
+DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://postgres:Mobydick&15@localhost:5432/Finance_agent") 
+to connect to your local db
 
-Settings via Pydantic’s BaseSettings
-The Settings class is used to load configuration variables (like database credentials and API keys) from environment variables or a .env file. This centralizes configuration so that no credentials or “magic numbers” are hard-coded into the rest of the code.
+To run the backend, navigate to the project's root directory and run:
+uvicorn main:app --reload
 
-Benefits:
-Makes the application more secure and easier to configure for different environments (local development, production, etc.).
+## API Endpoints (Storage Microservice)
 
-# 4. Storage Microservice
-This module is responsible for interacting with the database and managing data persistence:
+The Storage microservice exposes the following API endpoints (relative to the `/storage` prefix):
 
-- **Database Connection (storage/database.py)**:
+**Users:**
 
-SQLAlchemy Engine & Session
-A database URL is constructed from the settings, and an SQLAlchemy engine is created.
-A session factory (SessionLocal) is defined so that each incoming request gets its own database session via the get_db dependency function.
-Dependency Injection
-FastAPI’s dependency injection mechanism uses get_db to ensure that every endpoint interacting with the database has a properly managed session.
+*   `POST /users/`: Create a new user.
+*   `GET /users/`: Get a list of all users.
+*   `GET /users/{user_id}`: Get a user by ID.
+* `GET /users/name/{username}`: Get user by the username.
 
--  **Data Models (storage/models.py)**:
+**Conversations:**
 
-User Model
-We define a simple User model (using SQLAlchemy’s declarative_base) with fields such as:
+*   `POST /users/{user_id}/conversations/`: Create a new conversation for a user.
+*   `GET /conversations/{conversation_id}`: Get a conversation by ID.
+*   `GET /users/{user_id}/conversations/`: Get all conversations for a user.
 
-    id
-    username
-    email
-    This model represents a table in our PostgreSQL database.
+**Checkpoints:**
 
-**Pydantic Schemas (storage/schemas.py)**:
+*   `POST /conversations/{conversation_id}/checkpoints/`: Create a new checkpoint for a conversation.
+*   `GET /conversations/{conversation_id}/checkpoints/latest`: Get the latest checkpoint for a conversation.
+*  `GET /conversations/{conversation_id}/checkpoints/`: Get all checkpoints.
 
-Data Validation & Serialization
+## Future Improvements
 
-The UserCreate schema is used to validate incoming data (e.g., from a POST request).
-The UserRead schema is used for responses.
-The orm_mode = True setting in Pydantic allows SQLAlchemy objects to be returned directly.
-
-- **CRUD Operations (storage/crud.py)**:
-
-Abstracting Database Logic. This module contains helper functions, such as:
-
-    create_user
-    get_user
-    These functions encapsulate the logic for interacting with the database, keeping the routers clean and focused on HTTP request/response handling.
-
-- **API Router (storage/router.py)**: 
-Endpoints for CRUD Operations. Two endpoints are provided:
-
-    POST /storage/users → Create a new user.
-    GET /storage/users/{user_id} → Retrieve user information.
-    Error Handling
-    If a user already exists or if the user isn’t found, the appropriate HTTP exceptions are raised.
+*   **Dockerization:** Containerize the application and its dependencies (PostgreSQL) using Docker Compose for easier deployment and management.
+*   **Authentication:** Implement JWT-based authentication for secure user access.
+*   **Error Handling:** Implement more robust error handling and logging throughout the application.
+*   **Testing:** Add unit and integration tests to ensure code quality and reliability.
+*   **Migrations:** Use a database migration tool (e.g., Alembic) to manage schema changes.
+*   **Asynchronous Operations:**  Use asynchronous operations (e.g., `async` and `await`) where appropriate to improve performance.
+*   **LLM Connector:** Complete the implementation of the LLM Connector microservice.
