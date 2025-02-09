@@ -11,7 +11,6 @@ from orchestrator.router import router as orchestrator_router
 def create_app() -> FastAPI:
     app = FastAPI(title="AI Agent Backend")
 
-    # Fixing CORS issues
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:5173"],  # Your frontend's exact origin

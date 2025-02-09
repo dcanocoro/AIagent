@@ -37,14 +37,10 @@ def handle_interview(question: str):
     then streaming or running it with an initial input.
     Returns a list of final messages from the graph for the user.
     """
-
     interview_graph = build_interview_graph()
-
     initial_input = {"messages": HumanMessage(content=question)}
-    collected_messages = []
-
+    final_message = None
     for event in interview_graph.stream(initial_input, stream_mode="values"):
         for message in event["messages"]:
-            collected_messages.append(message.content)
-
-    return collected_messages
+            final_message = message.content  # overwrite to keep only the latest message
+    return [final_message]  # wrap the final message in a list -- TO DO -> change the router and this to return a string only
