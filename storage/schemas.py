@@ -1,48 +1,50 @@
 # storage/schemas.py
 
 from pydantic import BaseModel, EmailStr
-from typing import Optional, List, Dict
+from typing import Optional, List
 from datetime import datetime
 
-class UserBase(BaseModel):
-    username: str
-    email: EmailStr
-    # Add other user fields here
+class MessageBase(BaseModel):
+    sender: str
+    content: str
 
-class UserCreate(UserBase):
-    password: str
+class MessageCreate(MessageBase):
+    pass
 
-class User(UserBase):
+class MessageOut(MessageBase):
     id: int
-    created_at: datetime
-    #hashed_password: str  # Usually, you don't expose hashed passwords
-
-    class Config:
-        orm_mode = True  # Enable ORM mode for SQLAlchemy models
-
-class ConversationBase(BaseModel):
-    pass #We could add extra fields here, like name
-
-class ConversationCreate(ConversationBase):
-    pass #We could add extra fields here
-
-class Conversation(ConversationBase):
-    id: int
-    user_id: int
-    created_at: datetime
+    timestamp: datetime
 
     class Config:
         orm_mode = True
 
-class CheckpointBase(BaseModel):
-    data: Dict  # Checkpoint data is a dictionary
+class ConversationBase(BaseModel):
+    title: Optional[str] = None
 
-class CheckpointCreate(CheckpointBase):
+class ConversationCreate(ConversationBase):
     pass
 
-class Checkpoint(CheckpointBase):
+class ConversationOut(BaseModel):
     id: int
-    conversation_id: int
+    user_id: int
+    title: Optional[str] = None
+    thread_id: str  # Ensure this is included
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        orm_mode = True
+
+
+class UserBase(BaseModel):
+    username: str
+    email: Optional[EmailStr] = None
+
+class UserCreate(UserBase):
+    password: str
+
+class UserOut(UserBase):
+    id: int
     created_at: datetime
 
     class Config:

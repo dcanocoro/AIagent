@@ -1,67 +1,126 @@
 # storage/router.py
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from . import crud, schemas, models # models added, it was failing
-from .database import get_db
-from typing import List
+import uuid
+
+from .database import SessionLocal
+from . import models, schemas
 
 router = APIRouter()
 
-@router.post("/users/", response_model=schemas.User)
-def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    db_user = crud.create_user(db, user=user)
-    if db_user is None:
-        raise HTTPException(status_code=400, detail="Username or email already registered")
-    return db_user
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
-@router.get("/users/", response_model=List[schemas.User])
-def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    users = crud.get_users(db, skip=skip, limit=limit)
-    return users
+# -----------------------
+# User Endpoints
+# -----------------------
+@router.post("/users", response_model=schemas.UserOut)
+def create_user(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
+    # Check if user already exists
+    existing_user = db.query(models.User).filter(models.User.username == user_in.username).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already registered",
+        )
 
-@router.get("/users/{user_id}", response_model=schemas.User)
-def read_user(user_id: int, db: Session = Depends(get_db)):
-    db_user = crud.get_user(db, user_id=user_id)
-    if db_user is None:
+    hashed_pw = utils.get_password_hash(user_in.password)
+    user = models.User(
+        username=user_in.username,
+        email=user_in.email,
+        hashed_password=hashed_pw
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+@router.get("/users/{user_id}", response_model=schemas.UserOut)
+def get_user(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return db_user
-@router.get("/users/name/{username}", response_model=schemas.User)
-def read_user_by_name(username: str, db: Session = Depends(get_db)):
-    db_user = crud.get_user_by_username(db, username=username)
-    if db_user is None:
+    return user
+
+# ----------------------------
+# Conversation Endpoints
+# ----------------------------
+
+@router.post("/conversations", response_model=schemas.ConversationOut)
+def create_conversation(
+    conversation_in: schemas.ConversationCreate,
+    user_id: int,
+    db: Session = Depends(get_db)
+):
+    # Validate the user
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return db_user
 
-@router.post("/users/{user_id}/conversations/", response_model=schemas.Conversation)
-def create_conversation_for_user(user_id: int, db: Session = Depends(get_db)):
-    return crud.create_conversation(db=db, user_id=user_id)
+    # Generate a unique thread_id
+    thread_id = str(uuid.uuid4())  # Creates a UUID string
 
-@router.get("/conversations/{conversation_id}", response_model=schemas.Conversation)
-def read_conversation(conversation_id: int, db: Session = Depends(get_db)):
-    db_conversation = crud.get_conversation(db, conversation_id=conversation_id)
-    if db_conversation is None:
+    # Create and save the conversation with the generated thread_id
+    conversation = models.Conversation(
+        user_id=user.id,
+        title=conversation_in.title,
+        thread_id=thread_id  # Assign the generated thread ID
+    )
+    
+    db.add(conversation)
+    db.commit()
+    db.refresh(conversation)
+
+    return conversation
+
+
+@router.get("/conversations/{conversation_id}", response_model=schemas.ConversationOut)
+def get_conversation(conversation_id: int, db: Session = Depends(get_db)):
+    # Query the database for the conversation
+    conv = db.query(models.Conversation).filter(models.Conversation.id == conversation_id).first()
+    
+    # If conversation is not found, return a 404 error
+    if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    return db_conversation
+    
+    return conv  # FastAPI will automatically convert this to the response model
 
-@router.get("/users/{user_id}/conversations/", response_model=List[schemas.Conversation])
-def read_conversations_for_user(user_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    return crud.get_conversations_for_user(db=db, user_id=user_id, skip=skip, limit=limit)
 
-@router.post("/conversations/{conversation_id}/checkpoints/", response_model=schemas.Checkpoint)
-def create_checkpoint_for_conversation(conversation_id: int, checkpoint: schemas.CheckpointCreate, db: Session = Depends(get_db)):
-    return crud.create_checkpoint(db=db, conversation_id=conversation_id, data=checkpoint.data)
+# -------------------------
+# Message Endpoints
+# -------------------------
+@router.post("/conversations/{conversation_id}/messages", response_model=schemas.MessageOut)
+def add_message(
+    conversation_id: int,
+    message_in: schemas.MessageCreate,
+    db: Session = Depends(get_db)
+):
+    conversation = db.query(models.Conversation).filter(
+        models.Conversation.id == conversation_id
+    ).first()
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
-@router.get("/conversations/{conversation_id}/checkpoints/latest", response_model=schemas.Checkpoint)
-def read_latest_checkpoint(conversation_id: int, db: Session = Depends(get_db)):
-    db_checkpoint = crud.get_latest_checkpoint(db, conversation_id=conversation_id)
-    if db_checkpoint is None:
-        raise HTTPException(status_code=404, detail="Checkpoint not found")
-    return db_checkpoint
+    new_message = models.Message(
+        conversation_id=conversation.id,
+        sender=message_in.sender,
+        content=message_in.content
+    )
+    db.add(new_message)
+    # Update the conversation updated_at
+    conversation.updated_at = new_message.timestamp
+    db.commit()
+    db.refresh(new_message)
+    return new_message
 
-@router.get("/conversations/{conversation_id}/checkpoints/", response_model=List[schemas.Checkpoint])
-def read_checkpoints(conversation_id: int, db: Session = Depends(get_db)):
-    db_checkpoint = crud.get_all_checkpoints(db, conversation_id=conversation_id)
-    if db_checkpoint is None:
-        raise HTTPException(status_code=404, detail="Checkpoint not found")
-    return db_checkpoint
+@router.get("/conversations/{conversation_id}/messages", response_model=list[schemas.MessageOut])
+def get_messages_for_conversation(conversation_id: int, db: Session = Depends(get_db)):
+    messages = db.query(models.Message).filter(
+        models.Message.conversation_id == conversation_id
+    ).order_by(models.Message.timestamp.asc()).all()
+    return messages
