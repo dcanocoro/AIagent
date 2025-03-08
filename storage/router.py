@@ -1,15 +1,16 @@
 # storage/router.py
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from typing import List
 from sqlalchemy.orm import Session
 import uuid
-
 from .database import SessionLocal
-from . import models, schemas
+from . import models, schemas, router, utils
+
 
 router = APIRouter()
 
-def get_db():
+def get_db():  # probably needs to be moved to database.py
     db = SessionLocal()
     try:
         yield db
@@ -89,6 +90,20 @@ def get_conversation(conversation_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Conversation not found")
     
     return conv  # FastAPI will automatically convert this to the response model
+
+
+@router.get("/users/{user_id}/conversations", response_model=List[schemas.ConversationOut])
+def list_user_conversations(user_id: int, db: Session = Depends(get_db)):
+    """
+    Fetches all conversations for a specific user.
+    """
+    # Query conversations for the given user_id
+    conversations = db.query(models.Conversation).filter(models.Conversation.user_id == user_id).all()
+
+    if not conversations:
+        raise HTTPException(status_code=404, detail="No conversations found for this user")
+
+    return conversations
 
 
 # -------------------------

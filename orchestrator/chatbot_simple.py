@@ -7,8 +7,6 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.checkpoint.postgres import PostgresSaver
 
 
-
-thread = {"configurable": {"thread_id": "1"}}
 DB_URI = "postgresql://postgres:Mobydick&15@127.0.0.1:5432/ai_agent" 
 
 
@@ -43,7 +41,7 @@ def build_interview_graph(checkpointer):
     interview_graph = builder.compile(checkpointer=checkpointer)
     return interview_graph
 
-def handle_interview(question: str):
+def handle_interview(question: str, thread):
     """
     Orchestrates the interview-style chat by building the graph with Postgres memory,
     then streaming or running it with an initial input.
